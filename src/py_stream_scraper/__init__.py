@@ -1,2 +1,1 @@
-def main() -> None:
-    print("Hello from py-stream-scraper!")
+from .scraper import Scraper
