@@ -1,6 +1,8 @@
 from types import SimpleNamespace
-from py_stream_scraper import Scraper, ScraperBuilder
+from py_stream_scraper import Scraper, ScraperBuilder, FileSink
 from py_stream_scraper import scraper as scraper_mod
+import tempfile
+from pathlib import Path
 
 
 class DummyTree:
@@ -67,3 +69,26 @@ def test_builder_builds_and_discovers_urls(monkeypatch, redis_client):
     assert "https://example.com/blog/a.html" in pushed
     assert "https://example.com/news/today.html" in pushed
     assert "https://example.com/wp-admin/panel" not in pushed
+
+
+def test_builder_with_sink(redis_client):
+    """
+    set_sink で Sink を設定できることを検証
+    """
+    with tempfile.TemporaryDirectory() as tmpdir:
+        filepath = Path(tmpdir) / "output.csv"
+        sink = FileSink(str(filepath))
+
+        scraper = (
+            ScraperBuilder()
+            .set_host("example.com")
+            .set_qps(2)
+            .set_filter(r"^/(blog|news)/")
+            .set_sink(sink)
+            .set_redis_client(redis_client)
+            .build()
+        )
+
+        # Scraperにsink属性が追加されていることを確認
+        assert hasattr(scraper, "sink")
+        assert scraper.sink == sink
