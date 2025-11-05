@@ -27,4 +27,29 @@ uv run pytest
 ```
 
 
-# 障害耐性
+# architecture
+
+## URL management (構想段階)
+URLを管理する方法について考える。
+
+満たすべき要件をまずまとめる
+
+1. order preservation
+
+スクレイピングが途中で中断した場合、offsetを指定して途中から始めるには保存されているURLに順序が保たれている必要がある。
+
+2. compactness
+
+URLの量が数百、数千万になることが見込まれているためできるだけコンパクトに保存したい、
+
+3. iterable 
+
+すべてのURLをメモリにロードする必要がないようにしたい。
+
+4. partitionable
+
+hostによって分割可能である必要がある。
+
+## fault-recovery
+スクレイピングが途中で止まってしまった時の復旧方法について考える。
+
