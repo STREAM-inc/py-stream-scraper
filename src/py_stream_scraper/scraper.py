@@ -9,6 +9,8 @@ from usp.tree import sitemap_tree_for_homepage
 import re
 from typing import Callable, Iterable, List, Optional, Pattern, Union
 
+from .sink import Sink
+
 
 def _random_user_agent():
     def lerp(a1, b1, a2, b2, n):
@@ -66,6 +68,7 @@ class ScraperBuilder:
         self._filters: List[Pattern] = []
         self._parser: Optional[Callable] = None
         self._redis_client: Optional[redis.Redis] = None
+        self._sink: Optional[Sink] = None
 
     def set_host(self, host: str) -> "ScraperBuilder":
         if not host or not isinstance(host, str):
@@ -108,6 +111,21 @@ class ScraperBuilder:
         self._redis_client = client
         return self
 
+    def set_sink(self, sink: Sink) -> "ScraperBuilder":
+        """
+        データの保存先を設定する
+
+        Args:
+            sink: Sinkインスタンス（例: FileSink, ConsoleSinkなど）
+
+        Returns:
+            self（メソッドチェーン用）
+        """
+        if not isinstance(sink, Sink):
+            raise ValueError("sink must be an instance of Sink")
+        self._sink = sink
+        return self
+
     def build(self) -> Scraper:
         if not self._host:
             raise ValueError("host is required. Call set_host().")
@@ -129,6 +147,9 @@ class ScraperBuilder:
         if self._parser:
             # 既存クラスに影響を与えないよう、属性として追加
             setattr(scraper, "parser", self._parser)
+        if self._sink:
+            # Sinkも属性として追加
+            setattr(scraper, "sink", self._sink)
         return scraper
 
     # --- helpers ---
