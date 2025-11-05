@@ -1,17 +1,13 @@
 import datetime
-import logging
 import re
-import time
 import random
-import asyncio
 from typing import Callable, Iterable, List, Optional
-import aiohttp
 from urllib.parse import urlparse
 import redis
 from usp.tree import sitemap_tree_for_homepage
-from multiprocessing import Process
 
-from py_stream_scraper.log import setup_logger
+import re
+from typing import Callable, Iterable, List, Optional, Pattern, Union
 
 
 def _random_user_agent():
@@ -58,3 +54,99 @@ class Scraper:
 
     def scrape(self):
         pass
+
+
+FilterInput = Union[str, Pattern, Iterable[Union[str, Pattern]]]
+
+
+class ScraperBuilder:
+    def __init__(self):
+        self._host: Optional[str] = None
+        self._qps: Optional[float] = None
+        self._filters: List[Pattern] = []
+        self._parser: Optional[Callable] = None
+        self._redis_client: Optional[redis.Redis] = None
+
+    def set_host(self, host: str) -> "ScraperBuilder":
+        if not host or not isinstance(host, str):
+            raise ValueError("host must be a non-empty string")
+        self._host = host.strip()
+        return self
+
+    def set_qps(self, qps: Union[int, float]) -> "ScraperBuilder":
+        try:
+            qps_val = float(qps)
+        except Exception as e:
+            raise ValueError("qps must be a number") from e
+        if qps_val <= 0:
+            raise ValueError("qps must be > 0")
+        self._qps = qps_val
+        return self
+
+    def set_filter(self, filt: FilterInput, flags: int = 0) -> "ScraperBuilder":
+        """
+        filt に渡せるもの:
+          - r'^/(blog|news)/' のような文字列
+          - re.compile(...) 済みの Pattern
+          - 上記の反復可能（list/tuple など）
+        すべて build() 時点で Pattern に統一します（ここで渡した分は即時追加）。
+        """
+        compiled = self._coerce_filters(filt, flags)
+        self._filters.extend(compiled)
+        return self
+
+    def set_parser(self, parser: Callable) -> "ScraperBuilder":
+        """
+        解析関数（例: def parse(html)->dict）。build 後に scraper.parser として生やします。
+        """
+        if not callable(parser):
+            raise ValueError("parser must be callable")
+        self._parser = parser
+        return self
+
+    def set_redis_client(self, client: redis.Redis) -> "ScraperBuilder":
+        self._redis_client = client
+        return self
+
+    def build(self) -> Scraper:
+        if not self._host:
+            raise ValueError("host is required. Call set_host().")
+        if self._qps is None:
+            raise ValueError("qps is required. Call set_qps().")
+        if not self._filters:
+            # フィルタ未設定なら全許可の安全なデフォルトは避け、明示エラーにします
+            raise ValueError("at least one filter is required. Call set_filter().")
+
+        # すでに Pattern 化済みだが、念のため Pattern のみを渡す
+        url_filters: List[Pattern] = list(self._filters)
+
+        scraper = Scraper(
+            host=self._host,
+            qps=self._qps,
+            url_filter=url_filters,
+            redis_client=self._redis_client,
+        )
+        if self._parser:
+            # 既存クラスに影響を与えないよう、属性として追加
+            setattr(scraper, "parser", self._parser)
+        return scraper
+
+    # --- helpers ---
+    def _coerce_filters(self, filt: FilterInput, flags: int = 0) -> List[Pattern]:
+        def compile_one(x) -> Pattern:
+            if isinstance(x, str):
+                return re.compile(x, flags)
+            if hasattr(x, "pattern") and hasattr(x, "search"):
+                # すでに Pattern（re.Pattern 互換）
+                return x  # type: ignore
+            raise ValueError(f"Unsupported filter type: {type(x)}")
+
+        if isinstance(filt, (str, re.Pattern)):
+            return [compile_one(filt)]
+        try:
+            return [compile_one(x) for x in filt]  # type: ignore
+        except TypeError as e:
+            # filt が反復可能でない場合にここに来る
+            raise ValueError(
+                "filt must be a string, Pattern, or an iterable of them"
+            ) from e
