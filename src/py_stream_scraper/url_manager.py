@@ -23,22 +23,21 @@ class DiskURLManager(URLManager):
 
         self.upper = f"{host}\x01".encode("utf-8")
         self.lower = f"{host}\x00".encode("utf-8")
+        self.cursor = f"{self.host}:cursor".encode("utf-8")
         self.db.set(self.upper, b"")
         self.db.set(self.lower, b"")
 
     def add_url(self, url: str, meta: bytes = b""):
-        _, _, path, query = DiskURLManager.normalize_url(url)
+        path, query = DiskURLManager.normalize_url(url)
 
         k = self.key_for(path, query)
         v = url.encode("utf-8")
         self.db.set(k, v)
 
-    def to_iter(self, start_url: str | None = None):
-        if start_url is None:
-            iter = self.db.iterator(mode="from", key=self.lower)
-        else:
-            _, _, path, query = DiskURLManager.normalize_url(start_url)
-            iter = self.db.iterator(mode="from", key=self.key_for(path, query))
+    def to_iter(self, start_key: bytes | None = None):
+        if start_key is None:
+            start_key = self.lower
+        iter = self.db.iterator(mode="from", key=start_key)
         for key, value in iter:
             if key == self.lower:
                 continue
@@ -47,17 +46,23 @@ class DiskURLManager(URLManager):
             host = key.decode("utf-8").split("\x00")[0]
             if host != self.host:
                 break
-            yield value
+            yield key, value
+
+    def set_cursor(self, key: bytes | None = None):
+        if key is None:
+            self.db.set(self.cursor, self.lower)
+        else:
+            self.db.set(self.cursor, key)
+
+    def get_cursor(self) -> bytes:
+        return self.db.get(self.cursor)
 
     @classmethod
     def normalize_url(cls, u: str):
         p = urlparse(u.strip())
-        scheme = (p.scheme or "http").lower()
-        host = (p.hostname or "").rstrip(".").lower()
-        host = host.encode("idna").decode("ascii")
         path = p.path or "/"
         query = p.query
-        return scheme, host, path, query
+        return path, query
 
     def key_for(self, path: str, query: str, hash_tail: bool = False):
         prefix = f"{self.host}\x00".encode("utf-8")

@@ -10,6 +10,7 @@ import re
 from typing import Callable, Iterable, List, Optional, Pattern, Union
 
 from .sink import Sink
+from .url_manager import DiskURLManager
 
 
 def _random_user_agent():
@@ -42,20 +43,26 @@ class Scraper:
             host="localhost", port=6379, decode_responses=True
         )
         self.stream_name = f"stream-scraper:scrape:{self.host}"
+        self.url_manager = DiskURLManager(host)
 
     def discover_urls(self):
         index_url = f"https://{self.host}/"
         tree = sitemap_tree_for_homepage(index_url)
         for page in tree.all_pages():
             if self._path_allowed(page.url):
-                self.redis.xadd(self.stream_name, {"url": page.url})
+                self.url_manager.add_url(page.url)
 
     def _path_allowed(self, url):
         path = urlparse(url).path or "/"
         return any(rx.search(path) for rx in self.url_filter)
 
     def scrape(self):
-        pass
+        if self.url_manager.get_cursor() == self.url_manager.upper:
+            self.url_manager.set_cursor()
+        for key, url in self.url_manager.to_iter(self.url_manager.get_cursor()):
+            self.url_manager.set_cursor(key)
+            print(url)
+        self.url_manager.set_cursor()
 
 
 FilterInput = Union[str, Pattern, Iterable[Union[str, Pattern]]]
