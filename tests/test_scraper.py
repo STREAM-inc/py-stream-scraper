@@ -1,5 +1,6 @@
 from types import SimpleNamespace
-from py_stream_scraper import Scraper, ScraperBuilder, FileSink
+from py_stream_scraper.scraper import Scraper, ScraperBuilder
+from py_stream_scraper.sink import FileSink
 from py_stream_scraper import scraper as scraper_mod
 import tempfile
 from pathlib import Path

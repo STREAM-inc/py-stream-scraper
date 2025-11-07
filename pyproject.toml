@@ -10,6 +10,7 @@ dependencies = [
     "fakeredis>=2.32.0",
     "pytest>=8.4.2",
     "redis>=7.0.1",
+    "rocksdb-py>=0.0.6",
     "ultimate-sitemap-parser>=1.6.0",
 ]
 
