@@ -45,7 +45,7 @@ class Scraper:
         )
         self.stream_name = f"stream-scraper:scrape:{self.host}"
         self.url_manager = DiskURLManager(host)
-        self.limiter = Limiter(self.qps, MemoryStorage())
+        self.limiter = Limiter(self.qps, 100, MemoryStorage())
 
     def discover_urls(self):
         pass
