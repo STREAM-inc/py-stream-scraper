@@ -113,5 +113,9 @@ class Scraper:
                 pass
             except requests.exceptions.HTTPError:
                 pass
+            except KeyboardInterrupt:
+                raise KeyboardInterrupt
+            except:
+                pass
             self.url_manager.set_cursor(key)
         self.url_manager.set_cursor()
