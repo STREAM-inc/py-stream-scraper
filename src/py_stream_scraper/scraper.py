@@ -1,6 +1,7 @@
 import datetime
 import re
 import random
+import time
 from typing import Callable, Iterable, List, Optional
 from urllib.parse import urlparse
 import redis
@@ -11,6 +12,7 @@ from typing import Callable, Iterable, List, Optional, Pattern, Union
 
 from .sink import Sink
 from .url_manager import DiskURLManager
+from .rate_limiter import Limiter, MemoryStorage
 
 
 def _random_user_agent():
@@ -42,8 +44,10 @@ class Scraper:
         self.redis = redis_client or redis.Redis(
             host="localhost", port=6379, decode_responses=True
         )
+        self.parser = parser
         self.stream_name = f"stream-scraper:scrape:{self.host}"
         self.url_manager = DiskURLManager(host)
+        self.limiter = Limiter(self.qps, MemoryStorage())
 
     def discover_urls(self):
         index_url = f"https://{self.host}/"
@@ -60,8 +64,9 @@ class Scraper:
         if self.url_manager.get_cursor() == self.url_manager.upper:
             self.url_manager.set_cursor()
         for key, url in self.url_manager.to_iter(self.url_manager.get_cursor()):
+            while not self.limiter.consume(self.host):
+                time.sleep(0.01)
             self.url_manager.set_cursor(key)
-            print(url)
         self.url_manager.set_cursor()
 
 
