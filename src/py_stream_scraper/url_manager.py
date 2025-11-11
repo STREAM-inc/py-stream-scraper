@@ -88,3 +88,17 @@ class DiskURLManager(URLManager):
             num += 1
 
         return num
+
+    @property
+    def url_current_index(self):
+        num = 0
+        for key, _ in self.to_iter():
+            if key == self.lower:
+                continue
+            elif key == self.upper:
+                break
+            num += 1
+            if key == self.get_cursor():
+                break
+
+        return num
