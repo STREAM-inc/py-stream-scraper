@@ -47,6 +47,8 @@ class Scraper:
         self.redis = redis_client or redis.Redis(
             host="localhost", port=6379, decode_responses=True
         )
+
+        self.max_concurrency = 10
         self.stream_name = f"stream-scraper:scrape:{self.host}"
         self.url_manager = DiskURLManager(host)
         self.limiter = Limiter(self.qps, 100, MemoryStorage())
