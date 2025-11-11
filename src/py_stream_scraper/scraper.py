@@ -8,6 +8,8 @@ import requests
 import redis
 from usp.tree import sitemap_tree_for_homepage
 from tqdm import tqdm
+import aiohttp
+import asyncio
 
 import re
 from typing import Callable, Iterable, List, Optional, Pattern, Union
@@ -66,17 +68,11 @@ class Scraper:
             "upgrade-insecure-requests": "1",
         }
 
-        # referrer と cookies（credentials=include 相当）を指定
         self.session = requests.Session()
         self.session.headers.update(self.headers)
 
     def discover_urls(self):
         pass
-        # index_url = f"https://{self.host}/"
-        # tree = sitemap_tree_for_homepage(index_url)
-        # for page in tree.all_pages():
-        #     if self._path_allowed(page.url):
-        #         self.url_manager.add_url(page.url)
 
     def parse(self, url, html) -> List[str]:
         pass
@@ -85,37 +81,75 @@ class Scraper:
         path = urlparse(url).path or "/"
         return any(rx.search(path) for rx in self.url_filter)
 
-    def scrape(self, progress=False):
-        prog_f = lambda iter: (
-            tqdm(
-                iter,
-                total=self.url_manager.urls_total,
-                initial=self.url_manager.url_current_index,
-            )
-            if progress
-            else iter
-        )
+    async def _wait_for_token(self):
+        while not self.limiter.consume(self.host):
+            await asyncio.sleep(0.01)
+
+    async def _fetch_one(self, session: aiohttp.ClientSession, key: bytes, url: str):
+        await self._wait_for_token()
+        try:
+            async with session.get(
+                url, headers=self.headers, allow_redirects=True, timeout=15
+            ) as resp:
+                resp.raise_for_status()
+                if resp.status == 200:
+                    html = await resp.text()
+                    parsed = self.parse(url, html)
+                    self.sink.write(parsed)
+        except aiohttp.ClientConnectorError:
+            pass
+        except aiohttp.ClientResponseError:
+            pass
+        except asyncio.CancelledError:
+            raise
+        except Exception as e:
+            print(e)
+        finally:
+            self.url_manager.set_cursor(key)
+
+    async def scrape_async(self, progress: bool = False, ssl: bool = True):
         if self.url_manager.get_cursor() == self.url_manager.upper:
             self.url_manager.set_cursor()
-        for key, url in prog_f(self.url_manager.to_iter(self.url_manager.get_cursor())):
-            while not self.limiter.consume(self.host):
-                time.sleep(0.01)
-            try:
-                res = self.session.get(
-                    url, headers=self.headers, allow_redirects=True, timeout=15
-                )
-                res.raise_for_status()
 
-                if res.status_code == 200:
-                    parsed = self.parse(url, res.text)
-                    self.sink.write(parsed)
-            except requests.exceptions.ConnectionError:
-                pass
-            except requests.exceptions.HTTPError:
-                pass
-            except KeyboardInterrupt:
-                raise KeyboardInterrupt
-            except Exception as e:
-                print(e)
-            self.url_manager.set_cursor(key)
+        pbar = None
+        if progress:
+            pbar = tqdm(
+                total=self.url_manager.urls_total,
+                initial=self.url_manager.url_current_index,
+                desc=f"Scraping {self.host}",
+            )
+
+        connector = aiohttp.TCPConnector(limit_per_host=self.max_concurrency, ssl=ssl)
+        async with aiohttp.ClientSession(
+            connector=connector, headers=self.headers
+        ) as session:
+            sem = asyncio.Semaphore(self.max_concurrency)
+
+            async def worker(key: bytes, url: str):
+                async with sem:
+                    await self._fetch_one(session, key, url)
+                if pbar:
+                    pbar.update(1)
+
+            tasks = []
+            try:
+                for key, url in self.url_manager.to_iter(self.url_manager.get_cursor()):
+                    tasks.append(asyncio.create_task(worker(key, url)))
+
+                    if len(tasks) >= self.max_concurrency * 4:
+                        for t in asyncio.as_completed(tasks):
+                            await t
+                        tasks.clear()
+
+                if tasks:
+                    for t in asyncio.as_completed(tasks):
+                        await t
+
+            finally:
+                if pbar:
+                    pbar.close()
+
         self.url_manager.set_cursor()
+
+    def scrape(self, progress: bool = False):
+        return asyncio.run(self.scrape_async(progress=progress))
