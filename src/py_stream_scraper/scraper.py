@@ -87,7 +87,13 @@ class Scraper:
 
     def scrape(self, progress=False):
         prog_f = lambda iter: (
-            tqdm(iter, total=self.url_manager.urls_total) if progress else iter
+            tqdm(
+                iter,
+                total=self.url_manager.urls_total,
+                initial=self.url_manager.url_current_index,
+            )
+            if progress
+            else iter
         )
         if self.url_manager.get_cursor() == self.url_manager.upper:
             self.url_manager.set_cursor()
@@ -103,7 +109,9 @@ class Scraper:
                 if res.status_code == 200:
                     parsed = self.parse(url, res.text)
                     self.sink.write(parsed)
-            except:
+            except requests.exceptions.ConnectionError:
+                pass
+            except requests.exceptions.HTTPError:
                 pass
             self.url_manager.set_cursor(key)
         self.url_manager.set_cursor()
