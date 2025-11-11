@@ -4,13 +4,14 @@ import random
 import time
 from typing import Callable, Iterable, List, Optional
 from urllib.parse import urlparse
+import requests
 import redis
 from usp.tree import sitemap_tree_for_homepage
 
 import re
 from typing import Callable, Iterable, List, Optional, Pattern, Union
 
-from .sink import Sink
+from .sink import Sink, FileSink
 from .url_manager import DiskURLManager
 from .rate_limiter import Limiter, MemoryStorage
 
@@ -46,6 +47,26 @@ class Scraper:
         self.stream_name = f"stream-scraper:scrape:{self.host}"
         self.url_manager = DiskURLManager(host)
         self.limiter = Limiter(self.qps, 100, MemoryStorage())
+        self.sink = FileSink(f"{self.host.replace(".", "-")}.csv")
+
+        self.headers = {
+            "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+            "accept-language": "en-US,en;q=0.9",
+            "cache-control": "no-cache",
+            "pragma": "no-cache",
+            "sec-ch-ua": '"Chromium";v="142", "Google Chrome";v="142", "Not_A Brand";v="99"',
+            "sec-ch-ua-mobile": "?0",
+            "sec-ch-ua-platform": '"Windows"',
+            "sec-fetch-dest": "document",
+            "sec-fetch-mode": "navigate",
+            "sec-fetch-site": "cross-site",
+            "sec-fetch-user": "?1",
+            "upgrade-insecure-requests": "1",
+        }
+
+        # referrer と cookies（credentials=include 相当）を指定
+        self.session = requests.Session()
+        self.session.headers.update(self.headers)
 
     def discover_urls(self):
         pass
@@ -54,6 +75,9 @@ class Scraper:
         # for page in tree.all_pages():
         #     if self._path_allowed(page.url):
         #         self.url_manager.add_url(page.url)
+
+    def parse(self, html) -> List[str]:
+        pass
 
     def _path_allowed(self, url):
         path = urlparse(url).path or "/"
@@ -65,5 +89,16 @@ class Scraper:
         for key, url in self.url_manager.to_iter(self.url_manager.get_cursor()):
             while not self.limiter.consume(self.host):
                 time.sleep(0.01)
+            try:
+                res = self.session.get(
+                    url, headers=self.headers, allow_redirects=True, timeout=15
+                )
+                res.raise_for_status()
+
+                if res.status_code == 200:
+                    parsed = self.parse(res.text)
+                    self.sink.write(parsed)
+            except:
+                pass
             self.url_manager.set_cursor(key)
         self.url_manager.set_cursor()
