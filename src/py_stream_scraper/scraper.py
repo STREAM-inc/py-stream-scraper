@@ -76,7 +76,7 @@ class Scraper:
         #     if self._path_allowed(page.url):
         #         self.url_manager.add_url(page.url)
 
-    def parse(self, html) -> List[str]:
+    def parse(self, url, html) -> List[str]:
         pass
 
     def _path_allowed(self, url):
@@ -96,7 +96,7 @@ class Scraper:
                 res.raise_for_status()
 
                 if res.status_code == 200:
-                    parsed = self.parse(res.text)
+                    parsed = self.parse(url, res.text)
                     self.sink.write(parsed)
             except:
                 pass
