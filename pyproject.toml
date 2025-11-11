@@ -11,6 +11,7 @@ dependencies = [
     "pytest>=8.4.2",
     "redis>=7.0.1",
     "rocksdb-py>=0.0.6",
+    "tqdm>=4.67.1",
     "ultimate-sitemap-parser>=1.6.0",
 ]
 

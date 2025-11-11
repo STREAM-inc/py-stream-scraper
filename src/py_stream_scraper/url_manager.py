@@ -27,6 +27,8 @@ class DiskURLManager(URLManager):
         self.db.set(self.upper, b"")
         self.db.set(self.lower, b"")
 
+        self._num_url = None
+
     def add_url(self, url: str, meta: bytes = b""):
         path, query = DiskURLManager.normalize_url(url)
 
@@ -74,3 +76,15 @@ class DiskURLManager(URLManager):
         else:
             tail = (path + (("?" + query) if query else "")).encode("utf-8")
             return prefix + tail
+
+    @property
+    def urls_total(self):
+        num = 0
+        for key, _ in self.to_iter():
+            if key == self.lower:
+                continue
+            elif key == self.upper:
+                break
+            num += 1
+
+        return num

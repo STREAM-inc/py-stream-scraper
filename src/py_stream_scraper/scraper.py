@@ -7,6 +7,7 @@ from urllib.parse import urlparse
 import requests
 import redis
 from usp.tree import sitemap_tree_for_homepage
+from tqdm import tqdm
 
 import re
 from typing import Callable, Iterable, List, Optional, Pattern, Union
@@ -84,10 +85,13 @@ class Scraper:
         path = urlparse(url).path or "/"
         return any(rx.search(path) for rx in self.url_filter)
 
-    def scrape(self):
+    def scrape(self, progress=False):
+        prog_f = lambda iter: (
+            tqdm(iter, total=self.url_manager.urls_total) if progress else iter
+        )
         if self.url_manager.get_cursor() == self.url_manager.upper:
             self.url_manager.set_cursor()
-        for key, url in self.url_manager.to_iter(self.url_manager.get_cursor()):
+        for key, url in prog_f(self.url_manager.to_iter(self.url_manager.get_cursor())):
             while not self.limiter.consume(self.host):
                 time.sleep(0.01)
             try:
