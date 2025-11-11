@@ -96,7 +96,7 @@ class Scraper:
                 resp.raise_for_status()
                 if resp.status == 200:
                     html = await resp.text()
-                    parsed = self.parse(url, html)
+                    parsed = self.parse(url, html.decode("utf-8"))
                     self.sink.write(parsed)
         except aiohttp.ClientConnectorError:
             pass
