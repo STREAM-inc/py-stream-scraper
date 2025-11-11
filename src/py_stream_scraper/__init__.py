@@ -1,2 +1,2 @@
-from .scraper import ScraperBuilder, Scraper
+from .scraper import Scraper
 from .sink import FileSink
