@@ -47,7 +47,8 @@ class Scraper:
         self.stream_name = f"stream-scraper:scrape:{self.host}"
         self.url_manager = DiskURLManager(host)
         self.limiter = Limiter(self.qps, 100, MemoryStorage())
-        self.sink = FileSink(f"{self.host.replace(".", "-")}.csv")
+        outfilename = self.host.replace(".", "-") + ".csv"
+        self.sink = FileSink(outfilename)
 
         self.headers = {
             "accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
