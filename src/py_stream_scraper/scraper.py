@@ -42,7 +42,7 @@ _DEFAULT_USER_AGENT = _random_user_agent()
 
 
 class Scraper:
-    def __init__(self, host, qps, redis_client=None):
+    def __init__(self, host, qps, redis_client=None, max_concurrency=10):
         self.log = setup_logger()
         self.host = host
         self.qps = qps
@@ -50,7 +50,7 @@ class Scraper:
             host="localhost", port=6379, decode_responses=True
         )
 
-        self.max_concurrency = 10
+        self.max_concurrency = max_concurrency
         self.stream_name = f"stream-scraper:scrape:{self.host}"
         self.url_manager = DiskURLManager(host)
         self.limiter = Limiter(self.qps, 100, MemoryStorage())
