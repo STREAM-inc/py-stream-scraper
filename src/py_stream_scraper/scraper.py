@@ -41,12 +41,21 @@ def _random_user_agent():
 
 _DEFAULT_USER_AGENT = _random_user_agent()
 
+
 class FetchStrategy(enum.Enum):
     STOP_ON_FAIL = 1
     NEVER_STOP = 2
 
+
 class Scraper:
-    def __init__(self, host, qps, redis_client=None, max_concurrency=10, fetch_strategy=FetchStrategy.STOP_ON_FAIL):
+    def __init__(
+        self,
+        host,
+        qps,
+        redis_client=None,
+        max_concurrency=10,
+        fetch_strategy=FetchStrategy.STOP_ON_FAIL,
+    ):
         self.log = setup_logger()
         self.host = host
         self.qps = qps
@@ -194,7 +203,13 @@ class Scraper:
 
         self.url_manager.set_cursor()
 
-    def scrape_sync(self, progress: bool = False, ssl: bool = True, cache=False, url_filter: str | None =None):
+    def scrape_sync(
+        self,
+        progress: bool = False,
+        ssl: bool = True,
+        cache=False,
+        url_filter: str | None = None,
+    ):
         self.running = True
 
         if self.url_manager.get_cursor() == self.url_manager.upper:
@@ -221,6 +236,8 @@ class Scraper:
                     ptn = re.compile(url_filter)
                     if not ptn.search(url_str):
                         continue
+                if url_str.startswith("/") or not url_str.startswith("http"):
+                    url_str = f"https://{self.host}{url_str}"
 
                 self._fetch_one_sync(session, key_str, url_str, cache=cache)
 
