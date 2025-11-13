@@ -211,7 +211,7 @@ class Scraper:
         self,
         progress: bool = False,
         ssl: bool = True,
-        cache=False,
+        cache: Cache | None = None,
         url_filter: str | None = None,
     ):
         self.running = True
@@ -290,7 +290,7 @@ class DistributedScraper(Scraper):
     def scrape_sync(
         self,
         ssl: bool = True,
-        cache=False,
+        cache: Cache | None = None,
         url_filter: str | None = None,
     ):
         self.running = True
