@@ -4,8 +4,7 @@ import hashlib
 from click import Path
 
 
-@abc.ABC
-class Cache:
+class Cache(abc.ABC):
     @abc.abstractmethod
     def write(self, k: bytes, v: bytes):
         pass
