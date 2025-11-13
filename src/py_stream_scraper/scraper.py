@@ -279,11 +279,15 @@ class DistributedScraper(Scraper):
             fetch_strategy=fetch_strategy,
         )
 
-        self.redis.xgroup_create(self.stream_name, "scrapers", id="$", mkstream=True)
+        try:
+            self.redis.xgroup_create(
+                self.stream_name, "scrapers", id=">", mkstream=True
+            )
+        except:
+            pass
 
     def scrape_sync(
         self,
-        progress: bool = False,
         ssl: bool = True,
         cache=False,
         url_filter: str | None = None,
