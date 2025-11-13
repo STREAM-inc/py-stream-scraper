@@ -307,20 +307,21 @@ class DistributedScraper(Scraper):
                 block=5000,
             )
             try:
-                for msg_id, data in read_res[0]:
-                    url = data["url"].decode("utf-8")
+                for stream, messages in read_res:
+                    for msg_id, data in messages:
+                        url = data["url"].decode("utf-8")
 
-                    if url_filter:
-                        ptn = re.compile(url_filter)
-                        if not ptn.search(url_str):
-                            continue
-                    if url_str.startswith("/") or not url_str.startswith("http"):
-                        url_str = f"https://{self.host}{url_str}"
+                        if url_filter:
+                            ptn = re.compile(url_filter)
+                            if not ptn.search(url_str):
+                                continue
+                        if url_str.startswith("/") or not url_str.startswith("http"):
+                            url_str = f"https://{self.host}{url_str}"
 
-                    self._fetch_one_sync(session, url, msg_id, cache=cache)
+                        self._fetch_one_sync(session, url, msg_id, cache=cache)
 
-                    if not self.running:
-                        return
+                        if not self.running:
+                            return
             finally:
                 session.close()
 
