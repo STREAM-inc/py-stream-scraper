@@ -1,6 +1,6 @@
 [project]
 name = "py-stream-scraper"
-version = "0.1.13"
+version = "0.1.14"
 description = "Add your description here"
 readme = "README.md"
 authors = [{ name = "thecatblake", email = "k222ryousuke@gmail.com" }]
@@ -27,4 +27,4 @@ addopts = "-q"
 pythonpath = ["src"]
 
 [project.scripts]
-sx = "sx.cli:main"
+sx = "py_stream_scraper.cli:main"
