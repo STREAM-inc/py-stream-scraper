@@ -29,12 +29,18 @@ class DiskURLManager(URLManager):
 
         self._num_url = None
 
-    def add_url(self, url: str, meta: bytes = b""):
+    def add_url(self, url: str):
         path, query = DiskURLManager.normalize_url(url)
 
         k = self.key_for(path, query)
         v = url.encode("utf-8")
         self.db.set(k, v)
+
+    def delete_url(self, url: str):
+        path, query = DiskURLManager.normalize_url(url)
+        
+        k = self.key_for(path, query)
+        self.db.delete(k)
 
     def to_iter(self, start_key: bytes | None = None):
         if start_key is None:
