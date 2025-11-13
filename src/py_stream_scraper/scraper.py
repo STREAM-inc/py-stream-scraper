@@ -194,7 +194,7 @@ class Scraper:
 
         self.url_manager.set_cursor()
 
-    def scrape_sync(self, progress: bool = False, ssl: bool = True, cache=False):
+    def scrape_sync(self, progress: bool = False, ssl: bool = True, cache=False, url_filter: str | None =None):
         self.running = True
 
         if self.url_manager.get_cursor() == self.url_manager.upper:
@@ -216,6 +216,11 @@ class Scraper:
             for key, url in self.url_manager.to_iter(self.url_manager.get_cursor()):
                 key_str = key.decode("utf-8")
                 url_str = url.decode("utf-8")
+
+                if url_filter:
+                    ptn = re.compile(url_filter)
+                    if not ptn.search(url_str):
+                        continue
 
                 self._fetch_one_sync(session, key_str, url_str, cache=cache)
 
