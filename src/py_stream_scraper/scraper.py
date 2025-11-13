@@ -76,6 +76,12 @@ class Scraper:
     def discover_urls(self):
         pass
 
+    def discover_urls_from_sitemap(self, r_filter=None):
+        tree = sitemap_tree_for_homepage(f"https://{self.host}")
+        for page in tree.all_pages():
+            if r_filter and r_filter.search(page.url):
+                self.url_manager.add_url(page.url)
+
     def parse(self, url, html) -> List[str]:
         pass
 
@@ -87,7 +93,7 @@ class Scraper:
         while not self.limiter.consume(self.host):
             await asyncio.sleep(0.01)
 
-    async def _fetch_one(self, session: aiohttp.ClientSession, key: bytes, url: str):
+    async def _fetch_one(self, session: aiohttp.ClientSession, key: str, url: str):
         await self._wait_for_token()
         try:
             async with session.get(
@@ -96,7 +102,7 @@ class Scraper:
                 resp.raise_for_status()
                 if resp.status == 200:
                     html = await resp.text()
-                    parsed = self.parse(url, html.decode("utf-8"))
+                    parsed = self.parse(url, html)
                     self.sink.write(parsed)
         except aiohttp.ClientConnectorError:
             pass
@@ -107,7 +113,7 @@ class Scraper:
         except Exception as e:
             print(e)
         finally:
-            self.url_manager.set_cursor(key)
+            self.url_manager.set_cursor(key.encode("utf-8"))
 
     async def scrape_async(self, progress: bool = False, ssl: bool = True):
         if self.url_manager.get_cursor() == self.url_manager.upper:
@@ -136,7 +142,11 @@ class Scraper:
             tasks = []
             try:
                 for key, url in self.url_manager.to_iter(self.url_manager.get_cursor()):
-                    tasks.append(asyncio.create_task(worker(key, url)))
+                    tasks.append(
+                        asyncio.create_task(
+                            worker(key.decode("utf-8"), url.decode("utf-8"))
+                        )
+                    )
 
                     if len(tasks) >= self.max_concurrency * 4:
                         for t in asyncio.as_completed(tasks):
