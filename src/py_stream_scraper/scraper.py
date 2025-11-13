@@ -10,7 +10,8 @@ from usp.tree import sitemap_tree_for_homepage
 from tqdm import tqdm
 import aiohttp
 import asyncio
-
+import abc
+import enum
 import re
 from typing import Callable, Iterable, List, Optional, Pattern, Union
 
@@ -40,17 +41,20 @@ def _random_user_agent():
 
 _DEFAULT_USER_AGENT = _random_user_agent()
 
+class FetchStrategy(enum.Enum):
+    STOP_ON_FAIL = 1
+    NEVER_STOP = 2
 
 class Scraper:
-    def __init__(self, host, qps, redis_client=None, max_concurrency=10):
+    def __init__(self, host, qps, redis_client=None, max_concurrency=10, fetch_strategy=FetchStrategy.STOP_ON_FAIL):
         self.log = setup_logger()
         self.host = host
         self.qps = qps
         self.redis = redis_client or redis.Redis(
             host="localhost", port=6379, decode_responses=True
         )
-
         self.max_concurrency = max_concurrency
+        self.fetch_strategy = fetch_strategy
         self.stream_name = f"stream-scraper:scrape:{self.host}"
         self.url_manager = DiskURLManager(host)
         self.limiter = Limiter(self.qps, 100, MemoryStorage())
@@ -74,6 +78,8 @@ class Scraper:
 
         self.session = requests.Session()
         self.session.headers.update(self.headers)
+
+        self.running = False
 
     def discover_urls(self):
         pass
@@ -130,12 +136,11 @@ class Scraper:
                     html = resp.text
                     parsed = self.parse(url, html)
                     self.sink.write(parsed)
-        except requests.exceptions.ConnectionError:
-            pass
+                    self.url_manager.set_cursor(key.encode("utf-8"))
         except Exception as e:
             self.log.error(e)
-        finally:
-            self.url_manager.set_cursor(key.encode("utf-8"))
+            if self.fetch_strategy == FetchStrategy.STOP_ON_FAIL:
+                self.running = False
 
     async def scrape_async(self, progress: bool = False, ssl: bool = True):
         if self.url_manager.get_cursor() == self.url_manager.upper:
@@ -186,6 +191,8 @@ class Scraper:
         self.url_manager.set_cursor()
 
     def scrape_sync(self, progress: bool = False, ssl: bool = True):
+        self.running = True
+
         if self.url_manager.get_cursor() == self.url_manager.upper:
             self.url_manager.set_cursor()
 
@@ -207,6 +214,9 @@ class Scraper:
                 url_str = url.decode("utf-8")
 
                 self._fetch_one_sync(session, key_str, url_str)
+
+                if not self.running:
+                    return
 
                 if pbar:
                     pbar.update(1)
