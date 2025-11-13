@@ -17,6 +17,7 @@ from typing import Callable, Iterable, List, Optional, Pattern, Union
 from .sink import Sink, FileSink
 from .url_manager import DiskURLManager
 from .rate_limiter import Limiter, MemoryStorage
+from .log import setup_logger
 
 
 def _random_user_agent():
@@ -42,6 +43,7 @@ _DEFAULT_USER_AGENT = _random_user_agent()
 
 class Scraper:
     def __init__(self, host, qps, redis_client=None):
+        self.log = setup_logger()
         self.host = host
         self.qps = qps
         self.redis = redis_client or redis.Redis(
@@ -96,6 +98,7 @@ class Scraper:
     async def _fetch_one(self, session: aiohttp.ClientSession, key: str, url: str):
         await self._wait_for_token()
         try:
+            self.log.info(f"fetching: {url}")
             async with session.get(
                 url, headers=self.headers, allow_redirects=True, timeout=15
             ) as resp:
@@ -111,7 +114,7 @@ class Scraper:
         except asyncio.CancelledError:
             raise
         except Exception as e:
-            print(e)
+            self.log.error(e)
         finally:
             self.url_manager.set_cursor(key.encode("utf-8"))
 
