@@ -22,6 +22,7 @@ from .sink import Sink, FileSink
 from .url_manager import DiskURLManager
 from .rate_limiter import Limiter, MemoryStorage
 from .log import setup_logger
+from .cache import Cache
 
 
 def _random_user_agent():
@@ -136,7 +137,7 @@ class Scraper:
         finally:
             self.url_manager.set_cursor(key.encode("utf-8"))
 
-    def _fetch_one_sync(self, session, key, url, cache=False):
+    def _fetch_one_sync(self, session, key, url, cache: Cache | None = None):
         time.sleep(1.0 / self.qps)
         try:
             self.log.info(f"fetching: {url}")
@@ -148,7 +149,7 @@ class Scraper:
                     html = resp.text
                     if cache:
                         compressed = brotli.compress(html.encode("utf-8"))
-                        self.redis.set(url, compressed)
+                        cache.write(url, compressed)
                     else:
                         parsed = self.parse(url, html)
                         self.sink.write(parsed)
@@ -325,15 +326,7 @@ class DistributedScraper(Scraper):
             finally:
                 session.close()
 
-    def _cache_path(self, url: str) -> Path:
-        base_dir = Path(__file__).resolve().parent  # このファイルと同じディレクトリ
-        cache_dir = base_dir / ".cache_html"  # 隠しディレクトリっぽく
-        cache_dir.mkdir(parents=True, exist_ok=True)
-
-        digest = hashlib.sha1(url.encode("utf-8")).hexdigest()
-        return cache_dir / f"{digest}.br"
-
-    def _fetch_one_sync(self, session, url, msg_id, cache=False):
+    def _fetch_one_sync(self, session, url, msg_id, cache: Cache | None = None):
         time.sleep(1.0 / self.qps)
         try:
             self.log.info(f"fetching: {url}")
@@ -346,10 +339,7 @@ class DistributedScraper(Scraper):
                     self.redis.xack(self.stream_name, "scrapers", msg_id)
                     if cache:
                         compressed = brotli.compress(html.encode("utf-8"))
-                        cache_path = self._cache_path(url)
-                        with open(cache_path, "wb") as f:
-                            f.write(compressed)
-                        self.log.info(f"cached to {cache_path}")
+                        cache.write(url, compressed)
                     else:
                         parsed = self.parse(url, html)
                         self.sink.write(parsed)
