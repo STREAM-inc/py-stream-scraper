@@ -217,7 +217,7 @@ class Scraper:
                 key_str = key.decode("utf-8")
                 url_str = url.decode("utf-8")
 
-                self._fetch_one_sync(session, key_str, url_str)
+                self._fetch_one_sync(session, key_str, url_str, cache=cache)
 
                 if not self.running:
                     return
