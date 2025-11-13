@@ -126,7 +126,7 @@ class Scraper:
                 url, headers=self.headers, allow_redirects=True, timeout=15
             ) as resp:
                 resp.raise_for_status()
-                if resp.status == 200:
+                if resp.status_code == 200:
                     html = resp.text
                     parsed = self.parse(url, html)
                     self.sink.write(parsed)
