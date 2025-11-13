@@ -175,9 +175,12 @@ def discover(from_: Optional[str], host: Optional[str], arg: Optional[str]):
 @click.option("--host", help="show details")
 def list(host):
     manager = DiskURLManager(host)
+    cnt = 0
     for key, value in manager.to_iter(manager.lower):
         url_str = value.decode("utf-8")
+        cnt += 1
         print(url_str)
+    print(f"Total: {cnt} urls")
 
 # ---------------- scrape ----------------
 @_cli.command()
