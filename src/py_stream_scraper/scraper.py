@@ -346,4 +346,5 @@ class DistributedScraper(Scraper):
     def start_stream(self):
         for key, value in self.url_manager.to_iter(self.url_manager.lower):
             url_str = value.decode("utf-8")
+            self.log.info(f"streaming: {url_str}")
             self.redis.xadd(self.stream_name, {"url": url_str})
