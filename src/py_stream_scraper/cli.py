@@ -2,10 +2,11 @@ from urllib.parse import urlparse
 import sys, os, csv, json, importlib, xml.etree.ElementTree as ET
 from typing import Iterator, Optional
 import click
-from py_stream_scraper.scraper import Scraper
+from py_stream_scraper.scraper import DistributedScraper, Scraper
 from rich.console import Console
 from rich.panel import Panel
 from rich.progress import Progress, SpinnerColumn, TextColumn
+import redis
 
 from py_stream_scraper.url_manager import DiskURLManager
 
@@ -171,6 +172,7 @@ def discover(from_: Optional[str], host: Optional[str], arg: Optional[str]):
             cnt += 1
         p.update(t, description=f"done ({cnt} urls)")
 
+
 @_cli.command()
 @click.option("--host", help="show details")
 def list(host):
@@ -181,6 +183,15 @@ def list(host):
         cnt += 1
         print(url_str)
     print(f"Total: {cnt} urls")
+
+
+@_cli.command()
+@click.option("--host", help="show details")
+def stream(host):
+    scraper = DistributedScraper(host, 10)
+    scraper.start_stream()
+    log.print("Stream started. name: " + scraper.stream_name)
+
 
 # ---------------- scrape ----------------
 @_cli.command()

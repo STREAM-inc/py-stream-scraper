@@ -4,6 +4,7 @@ import random
 import time
 from typing import Callable, Iterable, List, Optional
 from urllib.parse import urlparse
+import uuid
 import requests
 import redis
 from usp.tree import sitemap_tree_for_homepage
@@ -257,3 +258,92 @@ class Scraper:
 
     def scrape(self, progress: bool = False):
         return asyncio.run(self.scrape_async(progress=progress))
+
+
+class DistributedScraper(Scraper):
+    def __init__(
+        self,
+        host,
+        qps,
+        redis_client=None,
+        max_concurrency=10,
+        fetch_strategy=FetchStrategy.STOP_ON_FAIL,
+    ):
+        super().__init__(
+            host,
+            qps,
+            redis_client=redis_client,
+            max_concurrency=max_concurrency,
+            fetch_strategy=fetch_strategy,
+        )
+
+        self.redis.xgroup_create(self.stream_name, "scrapers", id="$", mkstream=True)
+
+    def scrape_sync(
+        self,
+        progress: bool = False,
+        ssl: bool = True,
+        cache=False,
+        url_filter: str | None = None,
+    ):
+        self.running = True
+
+        session = requests.Session()
+        if not ssl:
+            session.verify = False
+
+        while True:
+            read_res = self.redis.xreadgroup(
+                groupname="scrapers",
+                consumername=str(uuid.uuid4()),
+                streams={self.stream_name: ">"},
+                count=10,
+                block=5000,
+            )
+            try:
+                for msg_id, data in read_res[0]:
+                    url = data["url"].decode("utf-8")
+
+                    if url_filter:
+                        ptn = re.compile(url_filter)
+                        if not ptn.search(url_str):
+                            continue
+                    if url_str.startswith("/") or not url_str.startswith("http"):
+                        url_str = f"https://{self.host}{url_str}"
+
+                    self._fetch_one_sync(session, url, msg_id, cache=cache)
+
+                    if not self.running:
+                        return
+            finally:
+                session.close()
+
+    def _fetch_one_sync(self, session, url, msg_id, cache=False):
+        time.sleep(1.0 / self.qps)
+        try:
+            self.log.info(f"fetching: {url}")
+            with session.get(
+                url, headers=self.headers, allow_redirects=True, timeout=15
+            ) as resp:
+                resp.raise_for_status()
+                if resp.status_code == 200:
+                    html = resp.text
+                    self.redis.xack(self.stream_name, "scrapers", msg_id)
+                    if cache:
+                        compressed = brotli.compress(html.encode("utf-8"))
+                        self.redis.set(url, compressed)
+                    else:
+                        parsed = self.parse(url, html)
+                        self.sink.write(parsed)
+        except Exception as e:
+            self.log.error(e)
+            if self.fetch_strategy == FetchStrategy.STOP_ON_FAIL:
+                self.running = False
+
+    def scrape(self, progress: bool = False):
+        return asyncio.run(self.scrape_async(progress=progress))
+
+    def start_stream(self):
+        for key, value in self.url_manager.to_iter(self.url_manager.lower):
+            url_str = value.decode("utf-8")
+            self.redis.xadd(self.stream_name, {"url": url_str})
