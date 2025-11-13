@@ -10,7 +10,7 @@ from usp.tree import sitemap_tree_for_homepage
 from tqdm import tqdm
 import aiohttp
 import asyncio
-import abc
+import brotli
 import enum
 import re
 from typing import Callable, Iterable, List, Optional, Pattern, Union
@@ -124,7 +124,7 @@ class Scraper:
         finally:
             self.url_manager.set_cursor(key.encode("utf-8"))
 
-    def _fetch_one_sync(self, session, key, url):
+    def _fetch_one_sync(self, session, key, url, cache=False):
         time.sleep(1.0 / self.qps)
         try:
             self.log.info(f"fetching: {url}")
@@ -134,8 +134,12 @@ class Scraper:
                 resp.raise_for_status()
                 if resp.status_code == 200:
                     html = resp.text
-                    parsed = self.parse(url, html)
-                    self.sink.write(parsed)
+                    if cache:
+                        compressed = brotli.compress(html.encode("utf-8"))
+                        self.redis.set(url, compressed)
+                    else:
+                        parsed = self.parse(url, html)
+                        self.sink.write(parsed)
                     self.url_manager.set_cursor(key.encode("utf-8"))
         except Exception as e:
             self.log.error(e)
@@ -190,7 +194,7 @@ class Scraper:
 
         self.url_manager.set_cursor()
 
-    def scrape_sync(self, progress: bool = False, ssl: bool = True):
+    def scrape_sync(self, progress: bool = False, ssl: bool = True, cache=False):
         self.running = True
 
         if self.url_manager.get_cursor() == self.url_manager.upper:
