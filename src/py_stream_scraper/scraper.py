@@ -1,10 +1,12 @@
 import datetime
+import hashlib
 import re
 import random
 import time
 from typing import Callable, Iterable, List, Optional
 from urllib.parse import urlparse
 import uuid
+from click import Path
 import requests
 import redis
 from usp.tree import sitemap_tree_for_homepage
@@ -318,6 +320,14 @@ class DistributedScraper(Scraper):
             finally:
                 session.close()
 
+    def _cache_path(self, url: str) -> Path:
+        base_dir = Path(__file__).resolve().parent  # このファイルと同じディレクトリ
+        cache_dir = base_dir / ".cache_html"  # 隠しディレクトリっぽく
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        digest = hashlib.sha1(url.encode("utf-8")).hexdigest()
+        return cache_dir / f"{digest}.br"
+
     def _fetch_one_sync(self, session, url, msg_id, cache=False):
         time.sleep(1.0 / self.qps)
         try:
@@ -331,7 +341,10 @@ class DistributedScraper(Scraper):
                     self.redis.xack(self.stream_name, "scrapers", msg_id)
                     if cache:
                         compressed = brotli.compress(html.encode("utf-8"))
-                        self.redis.set(url, compressed)
+                        cache_path = self._cache_path(url)
+                        with open(cache_path, "wb") as f:
+                            f.write(compressed)
+                        self.log.info(f"cached to {cache_path}")
                     else:
                         parsed = self.parse(url, html)
                         self.sink.write(parsed)
