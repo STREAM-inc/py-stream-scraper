@@ -118,6 +118,25 @@ class Scraper:
         finally:
             self.url_manager.set_cursor(key.encode("utf-8"))
 
+    def _fetch_one_sync(self, session, key, url):
+        time.sleep(1.0 / self.qps)
+        try:
+            self.log.info(f"fetching: {url}")
+            with session.get(
+                url, headers=self.headers, allow_redirects=True, timeout=15
+            ) as resp:
+                resp.raise_for_status()
+                if resp.status == 200:
+                    html = resp.text
+                    parsed = self.parse(url, html)
+                    self.sink.write(parsed)
+        except requests.exceptions.ConnectionError:
+            pass
+        except Exception as e:
+            self.log.error(e)
+        finally:
+            self.url_manager.set_cursor(key.encode("utf-8"))
+
     async def scrape_async(self, progress: bool = False, ssl: bool = True):
         if self.url_manager.get_cursor() == self.url_manager.upper:
             self.url_manager.set_cursor()
@@ -164,6 +183,40 @@ class Scraper:
                 if pbar:
                     pbar.close()
 
+        self.url_manager.set_cursor()
+
+    def scrape_sync(self, progress: bool = False, ssl: bool = True):
+        if self.url_manager.get_cursor() == self.url_manager.upper:
+            self.url_manager.set_cursor()
+
+        pbar = None
+        if progress:
+            pbar = tqdm(
+                total=self.url_manager.urls_total,
+                initial=self.url_manager.url_current_index,
+                desc=f"Scraping {self.host}",
+            )
+
+        session = requests.Session()
+        if not ssl:
+            session.verify = False
+
+        try:
+            for key, url in self.url_manager.to_iter(self.url_manager.get_cursor()):
+                key_str = key.decode("utf-8")
+                url_str = url.decode("utf-8")
+
+                self._fetch_one_sync(session, key_str, url_str)
+
+                if pbar:
+                    pbar.update(1)
+
+        finally:
+            if pbar:
+                pbar.close()
+            session.close()
+
+        # 終了位置を保存
         self.url_manager.set_cursor()
 
     def scrape(self, progress: bool = False):
