@@ -40,6 +40,15 @@ sudo cat /var/lib/rancher/k3s/server/node-token
 worker nodeの設定
 ```sh
 curl -sfL https://get.k3s.io | K3S_URL="https://<master_node_ip>:6443" k3S_TOKEN=<node-token> sh -
+
+sudo mkdir -p /etc/rancher/k3s
+
+sudo tee /etc/rancher/k3s/registries.yaml >/dev/null << 'EOF'
+mirrors:
+  "192.168.100.8:5000":
+    endpoint:
+      - "http://192.168.100.8:5000"
+EOF
 ```
 
 ## URL management
