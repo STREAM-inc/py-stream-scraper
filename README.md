@@ -45,9 +45,9 @@ sudo mkdir -p /etc/rancher/k3s
 
 sudo tee /etc/rancher/k3s/registries.yaml >/dev/null << 'EOF'
 mirrors:
-  "192.168.100.8:5000":
+  "<master_node>:5000":
     endpoint:
-      - "http://192.168.100.8:5000"
+      - "http://<master_node>:5000"
 EOF
 ```
 
