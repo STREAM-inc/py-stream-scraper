@@ -15,6 +15,8 @@ import aiohttp
 import asyncio
 import brotli
 import enum
+import socket
+import os
 import re
 from typing import Callable, Iterable, List, Optional, Pattern, Union
 
@@ -271,6 +273,7 @@ class DistributedScraper(Scraper):
         redis_client=None,
         max_concurrency=10,
         fetch_strategy=FetchStrategy.STOP_ON_FAIL,
+        consumer_name: str | None = None
     ):
         super().__init__(
             host,
@@ -280,12 +283,44 @@ class DistributedScraper(Scraper):
             fetch_strategy=fetch_strategy,
         )
 
+        self.consumer_name = consumer_name or f"{socket.gethostname()}:{os.getpid()}"
+
         try:
             self.redis.xgroup_create(
                 self.stream_name, "scrapers", id=">", mkstream=True
             )
         except:
             pass
+
+    def recover_stuck_messages(self, session, cache: Cache | None = None, url_filter: str | None = None, min_idle_ms: int = 60_000, batch: int = 100):
+        cursor = "0-0"
+        while True:
+            cursor, messages, _ = self.redis.xautoclaim(
+                self.stream_name,
+                "scrapers",
+                self.consumer_name,
+                min_idle_ms,
+                cursor,
+                count=batch,
+            )
+
+            if not messages:
+                break
+
+            for msg_id, data in messages:
+                url_str = data[b"url"].decode("utf-8")
+
+                if url_filter:
+                    ptn = re.compile(url_filter)
+                    if not ptn.search(url_str):
+                        continue
+                if url_str.startswith("/") or not url_str.startswith("http"):
+                    url_str = f"https://{self.host}{url_str}"
+
+                self._fetch_one_sync(session, url_str, msg_id, cache=cache)
+
+                if not self.running:
+                    return
 
     def scrape_sync(
         self,
@@ -298,6 +333,8 @@ class DistributedScraper(Scraper):
         session = requests.Session()
         if not ssl:
             session.verify = False
+
+        self.recover_stuck_messages(session, cache=cache, url_filter=url_filter)
 
         while True:
             read_res = self.redis.xreadgroup(
