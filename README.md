@@ -29,7 +29,20 @@ uv run pytest
 
 # architecture
 
-## URL management (構想段階)
+## Distributed Scraping
+k3sをもちいて社内PC間でclusterを構築している。
+
+master nodeの設定
+```sh
+sudo cat /var/lib/rancher/k3s/server/node-token
+```
+
+worker nodeの設定
+```sh
+curl -sfL https://get.k3s.io | K3S_URL="https://<master_node_ip>:6443" k3S_TOKEN=<node-token> sh -
+```
+
+## URL management
 URLを管理する方法について考える。
 
 満たすべき要件をまずまとめる
