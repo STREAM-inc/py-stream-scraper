@@ -273,7 +273,7 @@ class DistributedScraper(Scraper):
         redis_client=None,
         max_concurrency=10,
         fetch_strategy=FetchStrategy.STOP_ON_FAIL,
-        consumer_name: str | None = None
+        consumer_name: str | None = None,
     ):
         super().__init__(
             host,
@@ -287,12 +287,19 @@ class DistributedScraper(Scraper):
 
         try:
             self.redis.xgroup_create(
-                self.stream_name, "scrapers", id=">", mkstream=True
+                self.stream_name, "scrapers", id="0", mkstream=True
             )
         except:
             pass
 
-    def recover_stuck_messages(self, session, cache: Cache | None = None, url_filter: str | None = None, min_idle_ms: int = 60_000, batch: int = 100):
+    def recover_stuck_messages(
+        self,
+        session,
+        cache: Cache | None = None,
+        url_filter: str | None = None,
+        min_idle_ms: int = 60_000,
+        batch: int = 100,
+    ):
         cursor = "0-0"
         while True:
             cursor, messages, _ = self.redis.xautoclaim(
